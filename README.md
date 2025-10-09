@@ -25,7 +25,7 @@ Requirements: You must have Python installed and preferably a code editor like P
 3. Create a virtual environment, activate it, and install the requirements by running the following commands in the terminal:
     ```bash
     python3 -m venv venv
-    source .venv/bin/activate
+    source venv/bin/activate
     pip3 install -r requirements.txt
     ```
 4. Run the **game** by running the following command in the terminal:
@@ -43,3 +43,4 @@ Requirements: You must have Python installed and preferably a code editor like P
 - [pygame](https://www.pygame.org/): Pygame is a cross-platform set of Python modules designed for writing video games.
 - [python](https://www.python.org/): Python is a hight-level programming language 
 written in C
+
