@@ -1,0 +1,47 @@
+# Byte-code files
+*.pyc
+__pycache__
+
+# Virtual environment
+.venv/
+venv/
+env/
+ENV/
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Misc files
+# specifically for python debuggers, can store configuration
+.pdbrc.py
+# Jupyter notebooks
+.ipynb_checkpoints
+
+# Sensitive files (e.g., API keys, environment variables)
+# It is important not to commit these files
+.env
+.flaskenv
+secrets.toml
