@@ -20,7 +20,7 @@ MS_PER_FRAME = 1000 / FPS
 # Runner.config
 class Config:
     ACCELERATION = 0.001
-    BG_CLOUD_SPEED = 0.2
+    BG_CLOUD_SPEED = 0.8
     BOTTOM_PAD = 10
     CLEAR_TIME = 3000  # ms до появления препятствий
     CLOUD_FREQUENCY = 0.5
@@ -299,10 +299,9 @@ class Trex:
         
         # Speed drop увеличивает скорость падения
         if self.speed_drop:
-            self.y_pos += round(self.jump_velocity * 
-                               self.config.SPEED_DROP_COEFFICIENT * frames_elapsed)
+            self.y_pos += self.jump_velocity * self.config.SPEED_DROP_COEFFICIENT * frames_elapsed
         else:
-            self.y_pos += round(self.jump_velocity * frames_elapsed)
+            self.y_pos += self.jump_velocity * frames_elapsed
         
         self.jump_velocity += self.config.GRAVITY * frames_elapsed
         
@@ -548,7 +547,7 @@ class Obstacle:
         """Обновление позиции препятствия"""
         if not self.remove:
             actual_speed = speed + self.speed_offset if self.type_config.speed_offset else speed
-            self.x_pos -= math.floor((actual_speed * FPS / 1000) * delta_time)
+            self.x_pos -= (actual_speed * FPS / 1000) * delta_time
             
             # Анимация (для птеродактиля)
             if self.type_config.num_frames:
@@ -604,7 +603,7 @@ class Cloud:
     def update(self, speed):
         """Обновление позиции облака"""
         if not self.remove:
-            self.x_pos -= math.ceil(speed)
+            self.x_pos -= speed
             if not self.is_visible():
                 self.remove = True
     
@@ -638,6 +637,9 @@ class NightMode:
         self.stars = []
         self.draw_stars = False
         self.place_stars()
+        
+        # Оптимизация: создаём поверхность один раз
+        self.night_surface = pygame.Surface((self.container_width, DEFAULT_HEIGHT), pygame.SRCALPHA)
     
     def place_stars(self):
         """Размещение звёзд"""
@@ -684,22 +686,22 @@ class NightMode:
         if self.opacity <= 0:
             return
         
-        # Создаём полупрозрачную поверхность для звёзд и луны
-        night_surface = pygame.Surface((self.container_width, DEFAULT_HEIGHT), pygame.SRCALPHA)
+        # Очистка поверхности (прозрачный цвет)
+        self.night_surface.fill((0, 0, 0, 0))
         
         # Звёзды
         if self.draw_stars:
             star_color = (255, 255, 255, int(255 * self.opacity))
             for star in self.stars:
-                pygame.draw.circle(night_surface, star_color, 
+                pygame.draw.circle(self.night_surface, star_color, 
                                  (int(star['x']), star['y']), 2)
         
         # Луна (простой круг)
         moon_color = (255, 255, 255, int(255 * self.opacity))
-        pygame.draw.circle(night_surface, moon_color, 
+        pygame.draw.circle(self.night_surface, moon_color, 
                           (int(self.x_pos), self.y_pos), 10)
         
-        surface.blit(night_surface, (0, 0))
+        surface.blit(self.night_surface, (0, 0))
     
     def reset(self):
         self.current_phase = 0
@@ -723,7 +725,7 @@ class HorizonLine:
     
     def update(self, delta_time, speed):
         """Обновление позиции земли"""
-        increment = math.floor(speed * (FPS / 1000) * delta_time)
+        increment = speed * (FPS / 1000) * delta_time
         self.x_pos -= increment
         
         # Циклическое перемещение
@@ -1034,11 +1036,20 @@ def check_for_collision(obstacle, trex):
         obstacle_collision_boxes = obstacle.collision_boxes
         
         for t_box in trex_collision_boxes:
+            # Абсолютные координаты бокса дино
+            t_abs_x = t_box.x + trex_box.x
+            t_abs_y = t_box.y + trex_box.y
+            
             for o_box in obstacle_collision_boxes:
-                adj_trex_box = create_adjusted_collision_box(t_box, trex_box)
-                adj_obstacle_box = create_adjusted_collision_box(o_box, obstacle_box)
+                # Абсолютные координаты бокса препятствия
+                o_abs_x = o_box.x + obstacle_box.x
+                o_abs_y = o_box.y + obstacle_box.y
                 
-                if box_compare(adj_trex_box, adj_obstacle_box):
+                # Проверка пересечения (AABB)
+                if (t_abs_x < o_abs_x + o_box.width and
+                    t_abs_x + t_box.width > o_abs_x and
+                    t_abs_y < o_abs_y + o_box.height and
+                    t_abs_y + t_box.height > o_abs_y):
                     return True
     
     return False
@@ -1082,6 +1093,7 @@ class Game:
         self.activated = False
         self.playing = False
         self.crashed = False
+        self.won = False
         self.paused = False
         self.inverted = False
         self.invert_timer = 0
@@ -1119,28 +1131,38 @@ class Game:
         """Обработка нажатия клавиши"""
         # Прыжок: пробел или стрелка вверх
         if event.key in (pygame.K_SPACE, pygame.K_UP):
-            if not self.crashed:
+            if not self.crashed and not self.won:
                 if not self.playing:
                     self.playing = True
                     self.activated = True
                 
                 if not self.trex.jumping and not self.trex.ducking:
                     self.trex.start_jump(self.current_speed)
-            elif self.crashed:
-                # Рестарт после game over
+            elif self.crashed or self.won:
+                # Рестарт после game over или победы
                 self.restart()
         
         # Приседание: стрелка вниз
         if event.key == pygame.K_DOWN:
-            if self.playing and not self.crashed:
+            if self.playing and not self.crashed and not self.won:
                 if self.trex.jumping:
                     self.trex.set_speed_drop()
                 elif not self.trex.jumping and not self.trex.ducking:
                     self.trex.set_duck(True)
         
         # Рестарт: Enter
-        if event.key == pygame.K_RETURN and self.crashed:
+        if event.key == pygame.K_RETURN and (self.crashed or self.won):
             self.restart()
+
+        # Fullscreen: F11
+        if event.key == pygame.K_F11:
+            if self.screen.get_flags() & pygame.FULLSCREEN:
+                self.screen = pygame.display.set_mode(
+                    (self.window_width, self.window_height), 
+                    pygame.RESIZABLE
+                )
+            else:
+                self.screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
     
     def on_key_up(self, event):
         """Обработка отпускания клавиши"""
@@ -1171,6 +1193,10 @@ class Game:
             
             if not collision:
                 self.distance_ran += self.current_speed * delta_time / MS_PER_FRAME
+                
+                # Победа на 100000 очков
+                if self.distance_meter.get_actual_distance(self.distance_ran) >= 100000:
+                    self.victory()
                 
                 if self.current_speed < Config.MAX_SPEED:
                     self.current_speed += Config.ACCELERATION
@@ -1212,6 +1238,16 @@ class Game:
         else:
             self.inverted = not self.inverted if self.invert_trigger else self.inverted
     
+    def victory(self):
+        """Победа"""
+        self.playing = False
+        self.won = True
+        self.trex.update(100, Trex.Status.WAITING)
+        
+        if self.distance_ran > self.highest_score:
+            self.highest_score = math.ceil(self.distance_ran)
+            self.distance_meter.set_high_score(self.highest_score)
+
     def game_over(self):
         """Game Over"""
         self.playing = False
@@ -1230,6 +1266,7 @@ class Game:
         self.running_time = 0
         self.playing = True
         self.crashed = False
+        self.won = False
         self.distance_ran = 0
         self.current_speed = Config.SPEED
         
@@ -1260,6 +1297,14 @@ class Game:
         if self.crashed and self.game_over_panel:
             self.game_over_panel.draw(self.game_surface, self.inverted)
         
+        # Victory message
+        if self.won:
+            font = pygame.font.Font(None, 48)
+            text_color = COLOR_TEXT_NIGHT if self.inverted else COLOR_TEXT
+            text = font.render("V I C T O R Y !", True, text_color)
+            text_rect = text.get_rect(center=(DEFAULT_WIDTH // 2, DEFAULT_HEIGHT // 2))
+            self.game_surface.blit(text, text_rect)
+        
         # Масштабирование на размер окна с сохранением пропорций
         self.render_to_screen()
     
@@ -1275,7 +1320,7 @@ class Game:
         new_height = int(DEFAULT_HEIGHT * scale)
         
         # Масштабирование с качественной интерполяцией
-        scaled_surface = pygame.transform.smoothscale(self.game_surface, (new_width, new_height))
+        scaled_surface = pygame.transform.scale(self.game_surface, (new_width, new_height))
         
         # Центрирование
         x_offset = (self.window_width - new_width) // 2
