@@ -7,17 +7,14 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 def main():
-    parser = argparse.ArgumentParser(description="Project Raptor 2.0: Chrome Dino PPO Agent")
+    parser = argparse.ArgumentParser(description="Project Raptor 2.0: Pygame Dino PPO Agent")
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
 
     # Train Command
-    train_parser = subparsers.add_parser("train", help="Start PPO training with 16 environments")
+    train_parser = subparsers.add_parser("train", help="Start PPO training")
 
-    # Tune Command
-    tune_parser = subparsers.add_parser("tune", help="Run ROI tuner tool")
-    
-    # Play Command (Placeholder)
-    play_parser = subparsers.add_parser("play", help="Run trained agent (not implemented yet)")
+    # Play Command
+    play_parser = subparsers.add_parser("play", help="Play the game manually")
 
     args = parser.parse_args()
 
@@ -25,12 +22,13 @@ def main():
         print("Initializing Training Sequence...")
         from ai.training import train
         train()
-    elif args.command == "tune":
-        print("Initializing ROI Tuner...")
-        from tools.roi_tuner import main as run_tuner
-        run_tuner()
     elif args.command == "play":
-        print("Play mode not implemented yet.")
+        print("Launching Game for Human Play...")
+        # Add dino-pygame to path so we can import main
+        sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "dino-pygame"))
+        from main import Game
+        game = Game(human_mode=True)
+        game.run()
     else:
         parser.print_help()
 

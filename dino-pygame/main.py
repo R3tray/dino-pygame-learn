@@ -1061,18 +1061,23 @@ def check_for_collision(obstacle, trex):
 class Game:
     """Главный класс игры"""
     
-    def __init__(self):
+    def __init__(self, human_mode=True):
         # Размеры окна (пропорционально игровому полю 600x150)
         self.window_width = 900
         self.window_height = 225
+        self.human_mode = human_mode
         
         # Создание окна с поддержкой ресайза
-        self.screen = pygame.display.set_mode(
-            (self.window_width, self.window_height), 
-            pygame.RESIZABLE
-        )
-        pygame.display.set_caption("Dino Runner")
-        
+        if self.human_mode:
+            self.screen = pygame.display.set_mode(
+                (self.window_width, self.window_height), 
+                pygame.RESIZABLE
+            )
+            pygame.display.set_caption("Dino Runner")
+        else:
+            # Headless mode (hidden window) if needed, or just standard window for now
+            self.screen = pygame.display.set_mode((self.window_width, self.window_height))
+
         # Игровая поверхность (логическое разрешение)
         self.game_surface = pygame.Surface((DEFAULT_WIDTH, DEFAULT_HEIGHT))
         
@@ -1104,6 +1109,68 @@ class Game:
         self.horizon = Horizon(self.assets, self.dimensions, Config.GAP_COEFFICIENT)
         self.distance_meter = DistanceMeter(self.dimensions['WIDTH'])
         self.game_over_panel = None
+
+    def step(self, action):
+        """
+        Выполнить один шаг игры (для агента)
+        action: 0 - ничего, 1 - прыжок, 2 - присед
+        """
+        # Фиксированный шаг времени (1/60 сек)
+        delta_time = MS_PER_FRAME
+
+        if not self.playing:
+             if action == 1: # Jump to start
+                self.playing = True
+                self.activated = True
+                self.trex.start_jump(self.current_speed)
+        
+        if self.playing and not self.crashed and not self.won:
+            # Обработка действий агента
+            if action == 1: # Jump
+                if not self.trex.jumping and not self.trex.ducking:
+                    self.trex.start_jump(self.current_speed)
+            elif action == 2: # Duck
+                if self.trex.jumping:
+                    self.trex.set_speed_drop()
+                elif not self.trex.jumping:
+                    self.trex.set_duck(True)
+            else: # Nothing / Release Duck
+                 if self.trex.ducking:
+                     self.trex.set_duck(False)
+                 # Handle jump end (release space) logic if needed, 
+                 # but current jump logic handles duration internally somewhat.
+                 # Actually, end_jump is called on key UP. 
+                 # For agent, we might need to simulate holding key.
+                 # If action != 1 and jumping, call end_jump to allow variable height jumps?
+                 if self.trex.jumping:
+                     self.trex.end_jump()
+
+            # Обновление логики
+            self.update(delta_time)
+
+        # Отрисовка
+        self.draw()
+
+        return self.get_state()
+
+    def get_state(self):
+        """Получить текущее состояние игры"""
+        return {
+            "crashed": self.crashed,
+            "score": self.distance_ran,
+            "speed": self.current_speed,
+            "won": self.won
+        }
+
+    def get_frame(self):
+        """Получить текущий кадр как numpy array"""
+        # Используем surfarray для быстрого доступа к пикселям game_surface
+        # array3d возвращает (width, height, 3)
+        # Нам нужно транспонировать для удобства (height, width, 3) если нужно, 
+        # но обычно (W, H, C) это стандарт Pygame.
+        # Gym обычно ждет (H, W, C).
+        frame = pygame.surfarray.array3d(self.game_surface)
+        return frame.swapaxes(0, 1) # (W, H, 3) -> (H, W, 3)
     
     def handle_events(self):
         """Обработка событий"""
